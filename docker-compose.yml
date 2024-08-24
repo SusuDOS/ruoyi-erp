@@ -1,0 +1,74 @@
+services:
+    redis-container:
+        image: redis:latest
+        container_name: redis-container
+        ports:
+            - "6379:6379"
+        volumes:
+            - /usr/local/etc/redisContain/redis.conf:/usr/local/etc/redis/redis.conf:ro # 将配置文件设为只读
+        command: redis-server /usr/local/etc/redis/redis.conf
+        networks:
+            - backend
+        healthcheck:
+            test: [ "CMD", "redis-cli", "ping" ]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+
+    mysql-container:
+        image: mysql:8.0.12
+        container_name: mysql-container
+        environment:
+            MYSQL_ROOT_PASSWORD: ruoyi@TenHK
+        ports:
+            - "3306:3306"
+        volumes:
+            - /usr/local/etc/mysqlContain:/var/lib/mysql
+        networks:
+            - backend
+        depends_on:
+            - redis-container
+        healthcheck:
+            test: [ "CMD", "mysqladmin", "ping", "-h", "127.0.0.1" ]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+
+    backend-container:
+        image: ruoyi-admin
+        container_name: backend-container
+        ports:
+            - "8080:8080"
+        networks:
+            - backend
+        depends_on:
+            - mysql-container
+        environment:
+            JAVA_OPTS: "-Djava.awt.headless=true" # 启用Java选项，并设置为后台运行
+        healthcheck:
+            test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ] # 假设有一个健康检查端点
+            interval: 30s
+            timeout: 10s
+            retries: 3
+
+    nginx-container:
+        image: nginx:stable
+        container_name: nginx-container
+        ports:
+            - "9090:80"
+        volumes:
+            - /root/ruoyi-erp/ruoyi-ui/dist:/usr/share/nginx/html:ro # 将静态资源设为只读
+            - /usr/local/etc/nginxContain/nginx.conf:/etc/nginx/conf.d/default.conf:ro # 将配置文件设为只读
+        networks:
+            - backend
+        depends_on:
+            - backend-container
+        healthcheck:
+            test: [ "CMD", "curl", "-f", "http://localhost:80" ] # 检查Nginx服务是否可用
+            interval: 30s
+            timeout: 10s
+            retries: 3
+
+networks:
+    backend:
+        driver: bridge
